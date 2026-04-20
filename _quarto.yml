@@ -1,0 +1,16 @@
+project:
+  type: website
+  output-dir: docs  
+
+website:
+  title: "Coupling of severe climate change and extinctions drive biogeographic homogenization in deep time"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+  
+
+format:
+  html:
+    theme: cosmo
+    toc: true
