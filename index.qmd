@@ -3,7 +3,7 @@ theme: cosmo
 title: "Supplementary Code"
 title-block-banner: "#014240"
 title-block-banner-color: "#FFFFFF"
-subtitle: "Coupling of severe climate change and extinctions drive biogeographic homogenization in deep time"
+subtitle: "Coupling of severe climate change and extinction drive biogeographic homogenization in deep time"
 date: last-modified
 date-format: "YYYY-MM-DD"
 footnotes-hover: true
@@ -51,7 +51,7 @@ editor_options:
 ::: callout-tip
 ## **Reproducibility Statement**
 
-This Quarto report accompanies the manuscript *Coupling of severe climate change and extinctions drive biogoegraphic homogenization in deep time* submitted to *Proceedings B*.
+This Quarto report accompanies the manuscript *Coupling of severe climate change and extinction drive biogoegraphic homogenization in deep time* submitted to *Proceedings B*.
 
 It contains the full R code and analyses used to generate the results in the paper.
 
@@ -65,8 +65,8 @@ All analyses were conducted in R version 4.5.1 with Quarto.
 ```{r libraries, message=FALSE}
 rpkg <- c("dplyr ggplot2 readr boot divvy terra divDyn magick 
           conflicted piggyback CoordinateCleaner fossilbrush 
-           rgplates icosa tidyr tibble readr purrr deeptime 
-           patchwork downloadthis ggpubr stringr")
+           rgplates icosa tidyr tibble readr purrr patchwork
+           downloadthis ggpubr stringr ggrepel")
 
 import_pkg <- function(x)
   x |> trimws() |> strsplit("\\s+")  |> unlist() |> 
@@ -78,7 +78,7 @@ rpkg |> import_pkg()
 # Resolve conflicted functions.
 conflicted::conflict_prefer(name = "filter", winner = "dplyr",losers = "stats")
 conflicted::conflict_prefer(name = "lag",winner = "dplyr", losers = "stats")
-conflicted::conflict_prefer(name = "intersect",winner = "dplyr", losers = c("stats", "base", "terra"))
+conflicted::conflict_prefer(name = "intersect",winner = "dplyr", losers = c("stats", "base", "terra","lubridate"))
 conflicted::conflict_prefer(name = "union", winner = "dplyr", losers = c("terra", "base"))
 conflicted::conflict_prefer(name = "select", winner = "dplyr", losers = "raster")
 
@@ -93,7 +93,6 @@ Most of the functions we created for this script are stored here.
 #' @param R Earth mean radius (km)
 #' @param long1.r convert from degrees to radians for latitudes and longitudes.
 #' @export
-
 
 # Function to calculate Great Circle Distance:
 gcd.slc <- function(long1, lat1, long2, lat2) {
@@ -290,7 +289,6 @@ czekanowski_similarity <- function(df) {
   2 * min_sum / (sum(df$count_cell_x) + sum(df$count_cell_y))
 }
 
-
 # grid combos
 gridComb <- function(x, cell, accepted_name) {
   expand.grid(
@@ -368,7 +366,7 @@ czekanowski_data_prep <- function(x, cell, accepted_name) {
 
 # **All Similarity Calculations**
 
-Now we move on to the main calculations employed in our study. 
+Now we move on to the main calculations employed in our study.
 
 The following code is used to calculate the similarity values for each geologic age throughout the entire Phanerozoic for the occurrences of marine invertebrates, to examine which ages exhibit statistically meaningful changes in the biotic composition of global communities.
 
@@ -376,41 +374,25 @@ The following code is used to calculate the similarity values for each geologic 
 
 The fossil occurrence data analysed in this study was retrieved from the [Paleobiology Database](https://paleobiodb.org/#/) on November of 2024. Data pre-processing made use of functions from the `fossilbrush` and `CoordinateCleaner` R packages.
 
-::: {.callout-warning}
+::: callout-warning
 ## **Before you proceed**
+
 The following code chunk shows you how we processed the full Phanerozoic `Pbdb` dataset that was downloaded using the `Pbdb_download_new.R` script, which is available in our repository.
 
 The pbdb file is too large to upload to Github, so please run the Pbdb_download_new.R script first to generate it and store the resulting pbdb file (here, pbdb.data.Nov2024.csv) in the same working directory as the one you use for this script.
 :::
 
-
-
 ```{r pbdb}
-
 # Read occurrence dataset you generated in step 01. Replace the directory with the one of where you stored it:
  pbdb <-read.csv(file = '~/Documents/BioHom/pbdb.data.Nov2024.csv')
 
 # Adjust radiometric ages
- interval.ma    <- pbdb |> 
-   group_by(early_interval) |> 
+interval.ma <- pbdb |>
+  filter(!is.na(early_interval) & !is.na(min_ma)) |>
+  group_by(early_interval) |>
   summarise(min_ma = min(min_ma))
- names(interval.ma) <-c("early_interval", "interval.ma")
- pbdb       <- merge(pbdb, interval.ma, by=c("early_interval"))
-
- # Find first and last occurrences and merge back into data frame, using min_ma column
-fadlad <- pbdb |>
-  group_by(accepted_name)  |>
-  summarise(
-    fad = max(interval.ma),
-    lad = min(interval.ma)
-  )
-
-# Merge fad and lad information into data frame
-pbdb <- merge(pbdb, fadlad, by=c("accepted_name"))
-
-# Add extinction/survivor binary variable
-pbdb$ex <- 0
-pbdb$ex[pbdb$interval.ma==pbdb$lad] <- 1
+names(interval.ma) <- c("early_interval", "interval.ma")
+pbdb <- merge(pbdb, interval.ma, by = c("early_interval"))
 
 # Select variables.
 pbdb <- pbdb |>
@@ -448,6 +430,21 @@ pbdb_fulldata <- pbdb # keep a record of all pertinent information, just in case
 interval.ma$interval.ma <- as.numeric(interval.ma$interval.ma) #make sure it is in numeric form
 
 interval.ma <- interval.ma |> arrange(interval.ma) #arrange numerically
+
+ # Find first and last occurrences and merge back into data frame, using min_ma column
+fadlad <- pbdb |>
+  group_by(accepted_name)  |>
+  summarise(
+    fad = max(interval.ma),
+    lad = min(interval.ma)
+  )
+
+# Merge fad and lad information into data frame
+pbdb <- merge(pbdb, fadlad, by=c("accepted_name"))
+
+# Add extinction/survivor binary variable
+pbdb$ex <- 0
+pbdb$ex[pbdb$interval.ma==pbdb$lad] <- 1
 
 ```
 
@@ -624,7 +621,6 @@ image_write(img_gif, "plates_evolution.gif")
 
 knitr::include_graphics("plates_evolution.gif", auto_pdf = TRUE) #display the gif in the html file
 
-
 ```
 
 ### Data pre-processing
@@ -668,7 +664,6 @@ pbdb_subset <- pbdb |>
 
 all_phyla <- sort(unique(pbdb_subset$phylum)) 
 all_highlights <- c(highlight_classes, "Other")
-
 
 pbdb_subset <- pbdb_subset |>
   mutate(
@@ -721,7 +716,6 @@ for (intv in interval_names) {
     dpi = 300
   )
 }
-
 
 knitr::include_graphics("phylum_class/Katian.png") #display one example in the html file. all others were saved in the wd folder.
 
@@ -868,8 +862,8 @@ p <- ggplot(data_sub, aes(x = cell, y = n)) +
  message("Saved interval: ", int_name, " | Interval.ma: ", int, " | Cells: ", n_cells)
 }
 
-
 ```
+
 This is an example of one output for the Katian age. The rest are in the interval_maps folder we generated in your wd.
 
 ```{r example-katian2}
@@ -879,7 +873,7 @@ knitr::include_graphics("interval_maps/cells_Katian_intervalma_445.2_nCells_63.p
 
 How bad can the disparity in occurrences be, you ask? well, below I will show you how each age can host wildly different amounts of occurrences. To constrain for that, I will later show you my subsampling procedure and why I prioritize examining homogenization as a function of distance.
 
-``` {r genus-plot}
+```{r genus-plot}
 occ_counts <- pbdb |>
   dplyr::group_by(interval.ma) |>
   dplyr::summarise(
@@ -937,9 +931,10 @@ ggplot(occ_counts, aes(x = n_occ, y = reorder(interval.ma, n_occ))) +
     axis.title  = element_text(face = "bold", size = 9),
     plot.title  = element_text(face = "bold", size = 10)
   )
+
 ```
 
-### Subsampling 
+### Subsampling
 
 Here we perform subsampling without replacement on our stage-level datasets using 99 iterations. For each age we randomly sample 15 occurrences per cell and repeated the process as stated above. The results are subsampled datasets (cell-specific) saved as nested objects within a larger list. These are subsequently, merged into single master dataframes (i.e., the cells).
 
@@ -999,7 +994,8 @@ cells_distinct_pair <- cells_distinct |>
 ```
 
 ## Jaccard indices
-::: {.callout-note}
+
+::: callout-note
 ## **The Jaccard similarity equation**, following Miller et al., 2009:
 
 $$ J(Cell X, Cell Y) = \frac{|Cell X \cap Cell Y|}{|Cell X \cup Cell Y|} $$
@@ -1067,7 +1063,9 @@ jaccard_age<- jaccard_age |>
 jacc_final <- merge(jaccard_age, diff_ci, by= "interval.ma")
 
 ```
-### Similarity versus distance*
+
+### Similarity versus distance
+
 ```{r, warning =FALSE, message=FALSE}
 ## Now we will get the bootstrapped Jaccard as function of distance for each age.
 jacc_dist <- jaccard_distance(boot_combined, cells_distinct_pair) # use the jaccard_distance function we defined earlier 
@@ -1075,7 +1073,7 @@ jacc_dist <- jaccard_distance(boot_combined, cells_distinct_pair) # use the jacc
 # get replicate-level summaries for bootstrapped subsamples
 replicate_means_distance <- jacc_dist |>
   dplyr::ungroup() |>
-  dplyr::group_by(interval.ma, dist_bin) |>
+  dplyr::group_by(interval.ma, dist_bin, replicate) |>
   dplyr::summarise(
     reps_jacc = mean(jaccard_similarity, na.rm = TRUE),
     total_n_pairs = sum(n_pairs, na.rm = TRUE),
@@ -1142,7 +1140,7 @@ dist_ci <- diff_ci_dist|>
   scale_x_reverse() +
   geom_point(size = 2.5) +              # one point per interval
   ylim(0, 0.25) +
-  scale_color_manual(values = c("gray50", "#db6600")) +
+  scale_color_manual(values = c("gray60", "#db6600")) +
    geom_text(aes(label = ifelse(mean_diff > 0.049 | mean_diff<= -0.049 , early_interval, "")), vjust = -1, hjust = 0.45, size = 4) +
   labs( x = "Geologic Age",
     y = "Bootstrapped Jaccard Similarity",
@@ -1174,7 +1172,7 @@ b <- ggplot(jacc_final,
   geom_point(size = 2.5) +
   ylim(-0.2, 0.2) +
   geom_hline(yintercept = 0, linewidth = 0.5) +
-  scale_color_manual(values = c("grey50", "#db0096")) +
+  scale_color_manual(values = c("grey60", "#db0096")) +
   geom_text(aes(label = ifelse(mean_diff > 0.049 | mean_diff <= -0.049, early_interval, "")),
             vjust = -1, hjust = 0.45, size = 4) +
   labs(x = "Geologic Age (Ma)",
@@ -1196,23 +1194,8 @@ b <- ggplot(jacc_final,
         plot.subtitle = element_text(size = 10),
         aspect.ratio = 0.4)
 
-# add time scale bar
 
-b_geo <- b +
-  coord_geo(
-    dat = "periods",
-    pos = "bottom",
-    abbrv = TRUE,
-    size = 3,
-    lwd = 0.5,
-    alpha=0.6,
-    color="grey50"
-  )
-
-
-
-ggsave("jacc_phan_change.pdf", plot = b_geo, width = 12, height = 6, dpi = 300, units = "in")
-# no coord_geo on a, just strip the x axis
+ggsave("jacc_phan_change.pdf", plot = b, width = 12, height = 6, dpi = 300, units = "in")
 a_top <- a +
   labs(x = "") +
   theme(
@@ -1221,25 +1204,6 @@ a_top <- a +
     axis.title.x = element_blank(),
     plot.margin = margin(0, 0, 5, 0)  # small bottom margin
   )
-
-b_geo <- b +
-  coord_geo(
-    dat = "periods",
-    pos = "bottom",
-    abbrv = TRUE,
-    size = 3,
-    lwd = 0.5,
-    alpha = 0.5,
-    color = "grey60"
-  ) +
-  theme(plot.margin = margin(5, 0, 0, 0))  # small top margin
-
-combined <- a_top / b_geo +
-  plot_layout(guides = "collect") &
-  theme(legend.position = "right")
-
-
- ggsave("jacc_phan_combined.pdf", plot = combined, width = 12, height = 10, dpi = 300, units = "in")
  
 #Jaccard-distance plot:
 c <- diff_ci_dist|> 
@@ -1279,7 +1243,7 @@ c <- diff_ci_dist|>
         plot.subtitle = element_text(size = 10),
         aspect.ratio = 0.4)
 
-combined <- (a_top / b_geo / c) +
+combined <- (a/ b / c) +
   plot_layout(
     guides = "collect",
     heights = c(1, 1, 1)
@@ -1325,7 +1289,6 @@ replicate_means_lome <- jacc_dist |>
     .groups = "drop"
   )
 
-
 replicate_means_pt <- jacc_dist |>
    dplyr::filter(interval.ma %in% c(251.902, 251.2, 247.2, 242)) |> 
   dplyr::group_by(interval.ma, dist_bin, replicate) |>
@@ -1358,13 +1321,11 @@ pt_jacc <- replicate_means_pt|>
     .groups = "drop"
   )
 
-
 lome_jacc       <- merge(lome_jacc, interval.ma, by="interval.ma")
 lome_jacc$label <- lome_jacc$early_interval
 
 pt_jacc       <- merge(pt_jacc, interval.ma, by="interval.ma")
 pt_jacc$label <-pt_jacc$early_interval
-
 
 # Plot.
 d <- lome_jacc|> 
@@ -1399,7 +1360,6 @@ d <- lome_jacc|>
         aspect.ratio = 0.5)
 d
 ggsave("jacc_distance_lome.pdf", plot = d, width = 8, height = 6, dpi=300, units = "in")
-
 
 # Plot.
 e <- pt_jacc|> 
@@ -1438,13 +1398,14 @@ ggsave("jacc_distance_pt.pdf", plot = e, width = 8, height = 6, dpi=300, units =
 ```
 
 ## Czekanowski calculations
-:::: {.callout-note}
+
+::: callout-note
 ## **The quantified Czekanowski's coefficient equation**, following Miller et al., 2009:
 
 $$ J(Cell X, Cell Y) = \frac{|Cell X \cap Cell Y|}{|Cell X \cup Cell Y|} $$
 :::
 
-:::: {.callout-warning}
+::: callout-warning
 The quantified Czekanowski's coeffificent is incredibly computationally burdensome because it is an abundance-based measurement. As such, this is used to check the veracity of any statistically meaningful changes that occurred in the Phanerozoic (the Katian-Hirnantian-Rhuddanian; and the Changhsingian-Induan- -Olenekian-Anisian) and not all 90-100 geologic ages.
 :::
 
@@ -2011,7 +1972,6 @@ sumRes_cha <- cha_res_matrix |>
                                               "18000","20000")))|>
   as.data.frame() |> suppressWarnings() # This was added to ignore the last observation.
 
-
  #Induan
 n_pairs_ind <- ind_res_matrix |>
   filter(replicate == 1) |>
@@ -2077,7 +2037,6 @@ sumRes_ani <- ani_res_matrix |>
                                               "10000","12000","14000","16000",
                                               "18000","20000")))|>
   as.data.frame() |> suppressWarnings() # This was added to ignore the last observation.
-
 
 #Group by age-groups
 sumRes_LOME <- bind_rows(sumRes_kat, sumRes_hir, sumRes_rhud) # LOME
@@ -2150,6 +2109,7 @@ g
 ggsave("czek_distance_pt.pdf", plot = g, width = 8, height = 6, dpi=300, units = "in")
 
 ```
+
 ## **Sensitivity analysis**
 
 Similarity measurements by survival status.
@@ -2163,8 +2123,7 @@ pbdb_sensitivity <-
 # Split survival datasets by unique cell id.
 
 #First pulse:
-
-# after survivors
+ # after survivors
 sAft <- pbdb_sensitivity |> 
   filter(early_interval == "Hirnantian" & ex==0 & fad >=443.8) |>
   group_split(cell_id) |> lapply(as.data.frame)
@@ -2195,7 +2154,6 @@ sVHir <- pbdb_sensitivity |>
 sBefHir <- pbdb_sensitivity |> 
   filter(early_interval  == "Hirnantian" & ex==0) |>
   group_split(cell_id) |> lapply(as.data.frame)
-
 
 #bootstrap:
 
@@ -2247,8 +2205,6 @@ before_victims_jaccard_Hir <- jaccard_distance(sVHir,cells_distinct_pair)
 # Before survivors.
 before_survivors_jaccard_Hir <- jaccard_distance(sBefHir,cells_distinct_pair)
 
-
-
 ## FIRST PULSE
 
 #After survivors
@@ -2262,7 +2218,6 @@ replicate_means_sAfts <- after_survivors_jaccard |>
     n_pairs = mean(n_pairs, na.rm = TRUE),
     .groups = "drop"
   )
-
 
 sAfts_jacc <- replicate_means_sAfts|>
   dplyr::group_by( dist_bin) |>
@@ -2287,7 +2242,6 @@ replicate_means_sV <- before_victims_jaccard |>
     .groups = "drop"
   )
 
-
 sV_jacc <- replicate_means_sV|>
   dplyr::group_by( dist_bin) |>
   dplyr::summarise(
@@ -2310,7 +2264,6 @@ replicate_means_sBef <- before_survivors_jaccard |>
     n_pairs = mean(n_pairs, na.rm = TRUE),
     .groups = "drop"
   )
-
 
 sBef_jacc <- replicate_means_sBef|>
   dplyr::group_by( dist_bin) |>
@@ -2337,7 +2290,6 @@ replicate_means_sAfts_Hir <- after_survivors_jaccard_Hir|>
     .groups = "drop"
   )
 
-
 sAfts_jacc_Hir <- replicate_means_sAfts_Hir|>
   dplyr::group_by( dist_bin) |>
   dplyr::summarise(
@@ -2360,7 +2312,6 @@ replicate_means_sV_Hir <- before_victims_jaccard_Hir |>
     n_pairs = mean(n_pairs, na.rm = TRUE),
     .groups = "drop"
   )
-
 
 sV_jacc_Hir <- replicate_means_sV_Hir|>
   dplyr::group_by( dist_bin) |>
@@ -2385,7 +2336,6 @@ replicate_means_sBef_Hir <- before_survivors_jaccard_Hir |>
     .groups = "drop"
   )
 
-
 sBef_jacc_Hir <- replicate_means_sBef_Hir|>
   dplyr::group_by( dist_bin) |>
   dplyr::summarise(
@@ -2396,7 +2346,6 @@ sBef_jacc_Hir <- replicate_means_sBef_Hir|>
     n_pairs = mean(n_pairs, na.rm = TRUE),
     .groups = "drop"
   )
-
 
 ## LABELS 
 
@@ -2449,7 +2398,6 @@ scale_fill_manual(values =  c("gray60","black","darkorange4")) +
 sur1
 ggsave("jacc_distance_surv.pdf", plot = sur1, width = 8, height = 6, dpi=300, units = "in")
 
-
 # PULSE 2 
 sur2 <- sum_Pulse2|> 
    arrange(label) |> 
@@ -2483,7 +2431,6 @@ scale_fill_manual(values =  c("gray60","black","goldenrod")) +
 sur2
 ggsave("jacc_distance_surv_pulse2.pdf", plot = sur2, width = 8, height = 6, dpi=300, units = "in")
 
-  
 ```
 
 ###Disaster taxa
@@ -2529,6 +2476,7 @@ h
 ggsave("disaster_hir.pdf", plot = h, width = 8, height = 6, dpi=300, units = "in")
 
 ```
+
 ### Wastebin taxa removed
 
 Locate and remove all wastebin taxa, following the methods of *Plotnick and Wagner (2005)*. First, using the full database, locate all wastebin taxa throughout the "before" and "after" intervals by finding the 5 most frequent genus occurrences.
@@ -2547,7 +2495,6 @@ pbdb_occs <- pbdb |>
    slice_head(n = 20) |>  # keep only the top 20 rows
   arrange(accepted_name) # order alphabetically
         
-
 # Next, continue with the normal process of getting Jaccard similarity.
 
 # Here is where we remove the wastebin taxa:            
@@ -2560,8 +2507,7 @@ pbdb <- pbdb |>
 ```
 
 ```{r}
-  cl_rec <- pbdb[!cl,] #extract and check them
-  
+ cl_rec <- pbdb[!cl,] #extract and check them
  pbdb <- pbdb |> 
    cc_val(lat = "paleolat", lon="paleolng") #remove them
 ```
@@ -2574,9 +2520,7 @@ We'll begin with the generation of the Climate Stripes figure, since it's fairly
 
 Please load in the dataset from the Supplementary Materials of *Scotese (2021)*, which has the average global temperature per million years. In that file, you should calculate the average temperature per geologic age. If you can't do that, then no worries! The file *Scotese_intervalT.csv* is made available in Github for you to use and has all the information needed for this script.
 
-
 The following block of code creates two plots: The first is a climate stripe of Global Average Temperature (in degrees C) per geologic age, and the second is a climate stripe of climate *change* per geologic age (e.g., the Induan age became 5 degrees warmer than its previous age, the Changhsingian):
-
 
 ```{r climate, echo =TRUE}
 
@@ -2591,7 +2535,6 @@ Temps <- Temps[order(-Temps$Age), ]  #this will reverse the x axis
 Temps$Age <- factor(Temps$Age, levels =(Temps$Age)) # make it go in sequential order
 
 # Draw the plot:
-library(ggplot2)
 phan_climate<- Temps |> 
   ggplot(aes(x = factor(Age), y = 1, fill = ave_T)) +
   geom_tile() +
@@ -2618,7 +2561,7 @@ phan_climate<- Temps |>
 phan_climate
  
  # Make sure Ma is ordered and treated as a factor
-Temps$Ma <- factor(Temps$Age, levels = rev(levels(Temps$Age))) #levels = rev() will reverse the x axis
+Temps$Age <- factor(Temps$Age, levels = rev(levels(Temps$Age))) #levels = rev() will reverse the x axis
 Temps$T_change <- as.numeric(Temps$T_change)
 # Plot the climate stripes
 
@@ -2646,120 +2589,95 @@ climate_plot <- Temps |>
   )
 climate_plot
 
-
 ggsave("phan_climate.pdf", plot = phan_climate, width = 8, height = 6, dpi = 300)
 ggsave("climate-plot.pdf", plot = climate_plot, width = 8, height = 6, dpi = 300)
 
 ```
 
-## Foote's calculation of per-capita extinction rate
+## Foote's calculation of per-capita extinction intensity
 
-Net we calculate Foote's per-capita extinction rate using the simple equation from his 2000 publication. This was the gray portion of Figure 1, which was overlaid on the climate stripe:
+Net we calculate Foote's per-capita extinction intensity using the simple equation from his 2000 publication. This was the gray portion of Figure 1, which was overlaid on the climate stripe.
 
-Now, let's load in and clean the data. You can find the Pbdb .csv file in our Github repository as well.
+First, let's load in and clean the data. You can find the Pbdb .csv file in our Github repository as well.
 
 ```{r foote}
-#read in the Phanerozoic pbdb dataset
-pbdb <-read.csv(file = '~/Documents/BioHom/pbdb.data.Nov2024.csv')
 
-interval.ma    <-  pbdb |> 
-  filter(!is.na(early_interval) & !is.na(min_ma)) |> 
-  group_by(early_interval) |> 
- summarise(min_ma = min(min_ma))
-names(interval.ma) <-c("early_interval", "interval.ma")
-pbdb       <- merge(pbdb, interval.ma, by=c("early_interval"))
+pbdb_raw <- read.csv(file = '~/Documents/BioHom/pbdb.data.Nov2024.csv')
 
-# round the digits to keep consistent
-interval.ma <- interval.ma |> 
-  mutate(
-    interval.ma = round(interval.ma, 3)
-  )
+# radiometric dates
+interval.ma <- pbdb_raw |>
+  filter(!is.na(early_interval) & !is.na(min_ma)) |>
+  group_by(early_interval) |>
+  summarise(interval.ma = min(min_ma)) |>
+  ungroup() |>
+  distinct() |>
+  arrange(desc(interval.ma))
 
+# filter taxa
+pbdb <- pbdb_raw |>
+  filter(phylum %in% c("Echinodermata", "Bryozoa") | 
+         class %in% c("Gastropoda", "Bivalvia", "Trilobita", 
+                      "Rhynchonellata", "Strophomenata", "Anthozoa"))
 
-# Find first and last occurrences and merge back into data frame, using min_ma column
-fadlad <- pbdb |> 
-  group_by(accepted_name)  |> 
+# coordinate cleaning
+cl <- cc_val(pbdb, value = "flagged", lat = "paleolat", lon = "paleolng")
+cl_rec <- pbdb[!cl, ]
+pbdb <- pbdb |> cc_val(lat = "paleolat", lon = "paleolng")
+
+# taxonomy cleaning
+b_ranks <- c("phylum", "class", "order", "family", "accepted_name")
+b_suff <- list(NULL, NULL, NULL, NULL, c("ina", "ella", "etta"))
+pbdb2 <- check_taxonomy(pbdb, suff_set = b_suff, ranks = b_ranks,
+                        verbose = FALSE, clean_name = TRUE,
+                        resolve_duplicates = TRUE, jump = 5)
+pbdb <- pbdb2$data[1:nrow(pbdb), ]
+
+# fadlads
+fadlad <- pbdb |>
+  group_by(accepted_name) |>
   summarise(
     fadname = max(early_interval),
     ladname = min(early_interval),
-    fad = max(interval.ma),
-    lad = min(interval.ma)
-  )
+    fad = max(max_ma),
+    lad = min(min_ma)
+  ) |>
+  ungroup()
 
-# Round to correct number of digits:
-fadlad <- fadlad |> 
-  mutate(
-    fad = round(fad, 3),
-    lad = round(lad, 3)
-  )
-
-
-# Merge fad and lad information into data frame
-pbdb <- merge(pbdb, fadlad, by=c("accepted_name"))
-
-# Add extinction/survivor binary variable
-pbdb$ex <- 0
-pbdb$ex[pbdb$interval.ma==pbdb$lad] <- 1
-
-# Select variables.
-pbdb <- pbdb |> 
-  select(any_of(c("interval.ma","early_interval","interval.ma","fad","lad",
-                  "accepted_name","genus","ex","phylum","class",
-                  "order","family","paleolat","paleolng","formation","member",
-                  "occurrence_no","collection_no","collection_name",
-                  "reference_no")))
-
-# Keep the classes analyzed in this study
-pbdb <- pbdb |> 
-    filter(phylum %in% c("Echinodermata", "Bryozoa") | class %in% c("Gastropoda", "Bivalvia", "Trilobita", "Rhynchonellata", "Strophomenata", "Anthozoa"))
- 
- library(CoordinateCleaner)
-# Identify Invalid Coordinates.
-  cl <- cc_val(pbdb, value = "flagged", lat="paleolat", lon  ="paleolng") #flags incorrect coordinates
-  cl_rec <- pbdb[!cl,] #extract and check them
-  
- pbdb <- pbdb |> 
-   cc_val(lat = "paleolat", lon="paleolng") #remove them
- 
-# Use fossilbrush to clean taxonomic errors
- library(fossilbrush)
-b_ranks <- c("phylum", "class", "order", "family", "accepted_name") #accepted_name is genus name
-
-# Define a list of suffixes to be used at each taxonomic level when scanning for synonyms
-b_suff = list(NULL, NULL, NULL, NULL, c("ina", "ella", "etta"))
-
-pbdb2 <- check_taxonomy(pbdb, suff_set = b_suff, ranks = b_ranks, verbose = FALSE,clean_name = TRUE, resolve_duplicates = TRUE, jump = 5)
-# resolves homonyms, and jump refers to which taxonomic rank is the highest we resolve to. jump = 5 will stop before phylum since phylum level usually has little error.
-
-# Extract PBDB data from obdb2 so we have the corrected taxa:
-pbdb <- pbdb2$data[1:nrow(pbdb),]
-
-
-pbdb_fulldata <- pbdb # keep a record of all pertinent information, just in case
+# head(fadlad)
+# sum(fadlad$fad == fadlad$lad)  # single-interval taxa
+# nrow(fadlad)
 
 ```
 
 Now, we want to calculate Foote's rate of extinction:
 
-::: {.callout-note}
-### Per-Capita Rate of Extinction (Foote, 2000)
-$$ q = -ln(\frac{N_b}{N_{bt}}) $$ 
+::: callout-note
+### Extinction Intensity (Foote, 2000)
+
+$$ext = \frac{N_b - N_{bt}}{N_b}$$
+
 :::
 
-...where $N_b$ = the number of taxa that originated before the time interval and crossed into it (boundary-crossers), and $N_{bt}$ = the number of taxa that cross into the interval and survive it.
+...where $N_b$ = boundary-crossers (taxa present at the start of the interval), $N_{bt}$ = taxa that survived the interval, and $\Delta t$ = interval duration in Ma.
 
-
-```{r agepairs}
+```{r agepairs, warning=FALSE}
 
 # Create a matrix of age-pairs using interval.ma
  
-agepairs <- interval.ma |> 
-  arrange(interval.ma) |> # arrange by age number
+agepairs <- interval.ma |>
+  select(early_interval, interval.ma) |>
+  distinct() |>
+  arrange(desc(interval.ma)) |>  # oldest to youngest
   mutate(
-    next_interval.ma= lead(interval.ma), #get the age number of the next age
-    next_early_interval= lead(early_interval) #get the name of the next age
-  ) |> 
-  filter(!is.na(next_interval.ma)) #remove final row which does not have a next age
+    next_interval.ma    = lead(interval.ma),
+   duration            = interval.ma - next_interval.ma  # interval length in Ma
+  ) |>
+  filter(!is.na(next_interval.ma))
+
+# verify durations look reasonable
+agepairs |> 
+  filter(early_interval %in% c("Maastrichtian", "Changhsingian", "Hirnantian")) |>
+  select(early_interval, interval.ma, next_interval.ma, duration)
 
 ```
 
@@ -2769,53 +2687,290 @@ $N_{b}$ will be taxa that originated at or before `interval.ma`, and went extinc
 
 $N_{bt}$ will be taxa that originated at or before `interval.ma`, and went extinct after `next_interval.ma`
 
-```{r nb_nbt}
-extinction_rate <- agepairs |> rowwise() |>  
-  # rowwise is a function in dplyr that treats each row as its own group, so operations inside mutate() or other functions are applied one row at a time, instead of the standard, which is one column at a time 
- mutate(
-    Nb =  sum(fadlad$fad >= interval.ma      &   fadlad$lad <= next_interval.ma),
-  
-    Nbt = sum(fadlad$lad <  next_interval.ma &   fadlad$fad >= interval.ma),
-    q = ifelse(Nb > 0 & Nbt > 0, -log(Nbt / Nb), NA_real_) ) |> 
+```{r nb_nbt, warning =FALSE}
+
+extinction_rate <- agepairs |> rowwise() |>
+  # rowwise is a function in dplyr that treats each row as its own group, so operations inside mutate() or other functions are applied one row at a time, instead of the standard, which is one column at a time
+  mutate(
+    Nb  = sum(fadlad$fad > interval.ma & fadlad$lad <= interval.ma),
+    Nbt = sum(fadlad$fad > interval.ma & fadlad$lad < interval.ma),
+
+    # per-capita rate per Ma (Foote 2000 full formulation)
+    q = ifelse(Nb > 0 & Nbt > 0 & duration > 0,
+               -log(Nbt / Nb) / duration,
+               NA_real_),
+
+    # proportional extinction 
+    prop_ext = ifelse(Nb > 0, (Nb - Nbt) / Nb, NA_real_)
+  ) |>
   ungroup()
 
-```
-
-### Foote plot:
-
-```{r ext-plot}
-Temps$Ma <- as.numeric(as.character(Temps$Ma)) 
-extinction_rate$interval.ma <- as.numeric(extinction_rate$interval.ma)
+# use proportional extinction instead bc of short duration q inflation
 
 extinction_sub <- extinction_rate |>
-  arrange(desc(interval.ma)) |> 
-  mutate(interval_ma_factor = factor(interval.ma, levels = unique(interval.ma))) #convert interval.ma to factor so we can space each age evenly to match the climate stripe spacing 
+  arrange(desc(interval.ma)) |>
+  mutate(
+    interval_ma_factor = factor(interval.ma, levels = unique(interval.ma)),
+    prop_ext_norm = prop_ext / max(prop_ext, na.rm = TRUE)
+  )
 
-extinction_plot <- ggplot(extinction_sub, aes(x = interval_ma_factor, y = q)) + geom_col(fill = "gray50", width=1) + 
-   geom_text(    #label all ages with q > 0.3 # 
-  aes(label = ifelse(q > 0.1, interval.ma, "")), 
- vjust = -0.5,  size = 3 ) +
-  theme_void() + labs(title = "") + #"Foote's Per Capita Extinction Rate" 
-  theme( axis.text.x = element_blank(), # hide x labels 
-         axis.ticks.x = element_blank(), 
-         plot.margin = margin(0, 10, 10, 10), 
-         plot.title = element_text(hjust =), aspect.ratio = 0.5 )
+extinction_plot <- ggplot(extinction_sub, aes(x = interval_ma_factor, y = prop_ext)) +
+  geom_col(fill = "gray50", width = 1) +
+  theme_void() +
+  labs(title = "Proportional Extinction") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.margin = margin(0, 10, 10, 10),
+        aspect.ratio = 0.5)
 
 extinction_plot
 
-ggsave("extinction-plot.pdf", plot = extinction_plot, width = 8, height = 6, dpi = 300)
-
-
+ggsave("extinction_plot.pdf", plot = extinction_plot, width = 12, height = 6, dpi = 300)
 ```
 
-### Both plots together:
+## Climate/Extinction/Jaccard plots put together**
 
-```{r}
+Now we match the Foote extinction intensity plot with the climate stripes so we can overlay them.
 
-library(patchwork)
-foote_climate <- climate_plot / extinction_plot + plot_layout(heights = c(1, 2)) + plot_annotation(title = "Climate Change Strips Extinction")
+```{r ext-plot, warning =FALSE, message=FALSE}
 
+# reload Temps
+Temps <- read.csv(file = '~/Documents/BioHom/Temperature-change/Scotese_intervalT.csv') |>
+  select(-c(ScoteseAge, GAT, T_change_1)) |>
+  na.omit() |>
+  mutate(
+    ave_T    = as.numeric(ave_T),
+    T_change = as.numeric(T_change)
+  )
+
+# match each Temps age to nearest PBDB interval
+nearest_match <- function(x, table) {
+  table[which.min(abs(table - x))]
+}
+
+Temps$interval.ma <- sapply(Temps$Age, nearest_match,
+                             table = interval.ma$interval.ma)
+
+# join interval names
+interval_lookup <- data.frame(
+  early_interval = interval.ma$early_interval,
+  interval.ma    = as.numeric(interval.ma$interval.ma)
+)
+
+Temps <- Temps |>
+  left_join(interval_lookup, by = "interval.ma") |>
+  rename(early_interval = early_interval.x) |>
+  select(-early_interval.y)
+
+# build x axis from full Temps using interval.ma numeric values
+all_levels <- Temps |>
+  arrange(desc(Age)) |>
+  pull(interval.ma) |>
+  unique() |>
+  as.character()
+
+Temps_all <- Temps |>
+  arrange(desc(Age)) |>
+  mutate(x_shared = factor(as.character(interval.ma), levels = all_levels))
+
+# shift extinction bars one interval younger
+extinction_sub <- extinction_sub |>
+  mutate(x_shared = factor(as.character(next_interval.ma), levels = all_levels))
+
+# label with names
+interval_labels <- Temps |>
+  arrange(desc(Age)) |>
+  select(interval.ma, early_interval) |>
+  distinct() |>
+  deframe()  # creates named vector: names = interval.ma, values = early_interval
+
+# add to plot
+foote_climate <- ggplot() +
+  geom_tile(data = Temps_all,
+            aes(x = x_shared, y = 0.5, fill = T_change),
+            height = 1) +
+  scale_fill_gradient2(low = "#39A9C9", mid = "#F8F8FF", high = "red3",
+                       midpoint = 0, name = "T change (°C)") +
+  geom_col(data = extinction_sub,
+           aes(x = x_shared, y = prop_ext_norm),
+           fill = "gray20", width = 1, alpha = 0.4) +
+  scale_x_discrete(limits = all_levels,
+                   labels = interval_labels) +  # swap numeric for names
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.margin = margin(10, 10, 40, 10),
+        aspect.ratio = 0.25,
+        axis.text.x = element_text(size = 6, angle = 90,
+                                   hjust = 1, vjust = 0.5)) +
+  labs(title = "")
 foote_climate
+ggsave("foote_climate.pdf", plot = foote_climate, width = 12, height = 6, dpi = 300)
 
 ```
 
+And now, add the jaccard change plot on top:
+```{r final, warning=FALSE, message=FALSE}
+
+# jacc_final <- jacc_final |>
+#   mutate(early_interval = coalesce(early_interval.x, early_interval.y)) |>
+#   select(-early_interval.x, -early_interval.y)
+
+name_levels <- Temps |>
+  arrange(desc(Age)) |>
+  pull(early_interval) |>
+  unique()
+
+# add x_shared to match ages
+jacc_final <- jacc_final |>
+  mutate(x_shared = factor(early_interval, levels = name_levels))
+
+# verify
+sum(is.na(jacc_final$x_shared))  # should be 2 (Stage 10 and Stage 3)
+
+# rebuild
+Temps_all <- Temps |>
+  arrange(desc(Age)) |>
+  mutate(x_shared = factor(early_interval, levels = name_levels))
+
+# shift extinction bars one interval younger using name lookup
+next_lookup <- interval.ma |>
+  arrange(desc(interval.ma)) |>
+  mutate(next_early_interval = lead(early_interval)) |>
+  select(early_interval, next_early_interval)
+
+# build lookup from interval.ma to early_interval name
+ma_to_name <- interval.ma |>
+  select(early_interval, interval.ma) |>
+  distinct()
+
+# use next_interval.ma to find the next interval's name
+extinction_sub <- extinction_sub |>
+  left_join(ma_to_name, by = c("next_interval.ma" = "interval.ma"),
+            suffix = c("", "_next")) |>
+  mutate(x_shared = factor(early_interval_next, levels = name_levels))
+
+#  rebuild foote_climate
+foote_climate <- ggplot() +
+  geom_tile(data = Temps_all,
+            aes(x = x_shared, y = 0.5, fill = T_change),
+            height = 1) +
+  scale_fill_gradient2(low = "#39A9C9", mid = "#F8F8FF", high = "red3",
+                       midpoint = 0, name = "T change (°C)") +
+  geom_col(data = extinction_sub,
+           aes(x = x_shared, y = prop_ext_norm),
+           fill = "gray20", width = 1, alpha = 0.4) +
+  scale_x_discrete(limits = name_levels) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        plot.margin = margin(10, 10, 40, 10),
+        aspect.ratio = 0.25,
+        axis.text.x = element_text(size = 6, angle = 90,
+                                   hjust = 1, vjust = 0.5)) +
+  labs(title = "")
+
+#  rebuild jaccard change plot
+jacc_change_plot <- ggplot(jacc_final,
+                           aes(x = x_shared, y = mean_diff, colour = mass)) +
+  scale_x_discrete(limits = name_levels, drop = FALSE) +  # keep all levels
+  geom_point(size = 2.5) +
+  ylim(-0.2, 0.2) +
+  geom_hline(yintercept = 0, linewidth = 0.5) +
+  scale_color_manual(values = c("grey60", "#db0096")) +
+  geom_text(aes(label = ifelse(mean_diff > 0.049 | mean_diff <= -0.049,
+                               early_interval, "")),
+            vjust = -1, hjust = 0.45, size = 4) +
+  geom_errorbar(aes(ymin = lowci_diff, ymax = upci_diff),
+                width = 0.5, alpha = 0.3) +
+  labs(x = NULL,
+       y = "Change in Jaccard Similarity",
+       colour = "Extinction type") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size = 8),
+        axis.title = element_text(face = "bold", size = 10),
+        legend.position = "right",
+        aspect.ratio = 0.4)
+#  combine with patchwork
+
+# remove aspect.ratio from both plots and add explicit plot widths
+
+jacc_change_plot <- jacc_change_plot +
+  theme(aspect.ratio = NULL,
+        plot.margin = margin(5, 5, 0, 5))
+
+foote_climate <- foote_climate +
+  theme(aspect.ratio = NULL,
+        plot.margin = margin(0, 5, 5, 5))
+
+# combine with fixed widths
+combined <- (jacc_change_plot / foote_climate) +
+  plot_layout(heights = c(2, 1)) &  # jacc taller than climate stripe
+  theme(legend.position = "right")
+
+combined
+ggsave("jacc_foote_climate.pdf", plot = combined,
+       width = 16, height = 8, dpi = 300)
+
+```
+
+## Bivariate Plot (Temperature Change + Extinction Rate)
+
+Now we create a bivariate plot to visualize how temperature change and extinciton rate plot for the ages.
+
+```{r, warning = FALSE, message=FALSE}
+
+
+# merge extinction and temperature data by interval
+bivariate_data <- extinction_sub |>
+  left_join(
+    Temps |> select(interval.ma, early_interval, ave_T, T_change),
+    by = c("next_interval.ma" = "interval.ma"),
+    suffix = c("", "_next")  
+  ) |>
+  filter(!is.na(prop_ext) & !is.na(T_change)) |>
+  mutate(abs_T_change = abs(T_change))
+
+# the end of the series ends up with artificially high prop extinction because of the way the calculation is done, so remove them
+bivariate_data<- bivariate_data|>
+  filter(interval.ma >= 5) |>
+  arrange(desc(interval.ma)) |>
+  mutate(
+    interval_ma_factor = factor(interval.ma, levels = unique(interval.ma)),
+    prop_ext_norm      = prop_ext / max(prop_ext, na.rm = TRUE)
+  )
+
+# plot
+
+bivariate_plot <- ggplot(bivariate_data, aes(x = abs_T_change, y = prop_ext)) +
+  geom_point(aes(size = Nb), colour = "gray30", alpha = 0.7) +
+  geom_smooth(method = "lm", colour = "firebrick", se = TRUE) +
+  geom_text_repel(aes(label = ifelse(prop_ext > 0.33, early_interval_next, "")),
+                  size = 3,
+                  box.padding = 0.5,       # space around label
+                  point.padding = 0.3,     # space between label and point
+                  segment.size = 0.2,      # thin connecting line
+                  segment.alpha = 0.5,
+                  max.overlaps = Inf) +
+  scale_size_continuous(name = "Boundary crossers (Nb)",
+                        breaks = c(500, 1000, 1500, 2000)) +
+  labs(x = "Absolute Temperature Change (°C)",
+       y = "Proportional Extinction",
+       title = "") +
+  theme_bw() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.text  = element_text(size = 8),
+    axis.title = element_text(face = "bold", size = 10),
+    plot.title = element_text(face = "bold", size = 10),
+    legend.position = "right")
+
+bivariate_plot
+ggsave("bivariate_ext_temp.pdf", plot = bivariate_plot,
+       width = 8, height = 6, dpi = 300)
+
+```
